@@ -22,7 +22,8 @@ class BrowsingEventDB:
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS urls (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    url TEXT UNIQUE NOT NULL
+                    url TEXT UNIQUE NOT NULL,
+                    title TEXT
                 )
             """)
 
@@ -31,7 +32,6 @@ class BrowsingEventDB:
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     type TEXT NOT NULL,
                     url_id INTEGER NOT NULL,
-                    tab_id INTEGER NOT NULL,
                     timestamp INTEGER NOT NULL,
                     user_id INTEGER,
                     FOREIGN KEY (url_id) REFERENCES urls (id),
@@ -64,7 +64,7 @@ class BrowsingEventDB:
         cursor.execute("INSERT INTO users (username) VALUES (?)", (username,))
         return cursor.lastrowid
 
-    def _get_or_create_url(self, cursor: sqlite3.Cursor, url: str) -> int | None:
+    def _get_or_create_url(self, cursor: sqlite3.Cursor, url: str, title: str | None = None) -> int | None:
         """Get URL ID or create a new URL."""
         cursor.execute("SELECT id FROM urls WHERE url = ?", (url,))
         result = cursor.fetchone()
@@ -72,7 +72,7 @@ class BrowsingEventDB:
         if result:
             return result[0]
 
-        cursor.execute("INSERT INTO urls (url) VALUES (?)", (url,))
+        cursor.execute("INSERT INTO urls (url, title) VALUES (?, ?)", (url, title))
         return cursor.lastrowid
 
     def store_event(self, event_data: dict) -> int | None:
@@ -80,7 +80,7 @@ class BrowsingEventDB:
         with self.get_connection() as conn:
             cursor = conn.cursor()
 
-            url_id = self._get_or_create_url(cursor, event_data['url'])
+            url_id = self._get_or_create_url(cursor, event_data['url'], event_data['title'])
             user_id = None
             if event_data.get('user'):
                 user_id = self._get_or_create_user(cursor, event_data['user'])
@@ -93,12 +93,11 @@ class BrowsingEventDB:
 
             cursor.execute("""
                 INSERT INTO browsing_events
-                (type, url_id, tab_id, timestamp, user_id)
-                VALUES (?, ?, ?, ?, ?)
+                (type, url_id, timestamp, user_id)
+                VALUES (?, ?, ?, ?)
             """, (
                 event_data['type'],
                 url_id,
-                event_data['tabId'],
                 timestamp_epoch,
                 user_id
             ))
